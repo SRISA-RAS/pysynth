@@ -37,3 +37,13 @@ To troubleshoot potential issues (e.g. the program is stuck somewhere, looping e
 ```
 python . logs/log1a.txt -o output -v
 ```
+
+## Issues
+
+At the moment only a small part of the program is working correctly. For example, one is required to run it with the argument `--loops none`, as otherwise it will fail:
+```
+python . logs/log1a.txt -o output --loops none
+```
+This specific problem comes from particular lack of success with our attempts to 'reduce' loops and somehow reproduce their behaviour from the original workload.
+Firstly, a more elaborate analysis is required before making any changes on the loop. Secondly, it is hard to specify the algorithm for proper execution of those re-generated loops
+that would always produce correct results.
