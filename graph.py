@@ -3,7 +3,6 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Union
-from queue import SimpleQueue
 
 from instruction_types import SUBTYPE_TO_INSTRUCTIONS
 
@@ -75,7 +74,7 @@ class Unconditional(FlowChange):
     edge: FlowChangeEdge
 
     def add(self, edge: FlowChangeEdge):
-        raise Exception("Unexpected flowchange addition")
+        raise Exception(f"Unexpected flowchange addition: {edge}")
 
     def __iter__(self):
         yield self.edge
@@ -101,7 +100,7 @@ class Branch(FlowChange):
             assert edge.from_addr == self.taken.from_addr
             self.nottaken = edge
         else:
-            raise Exception("Unexpected flowchange addition")
+            raise Exception(f"Unexpected flowchange addition: {edge}")
 
     def __iter__(self):
         if self.nottaken is not None:
@@ -143,7 +142,7 @@ class Exit(FlowChange):
     __slots__ = ()
 
     def add(self, edge: FlowChangeEdge):
-        raise Exception("Unexpected flowchange addition")
+        raise Exception(f"Unexpected flowchange addition: {edge}")
 
 
 @dataclass
@@ -152,7 +151,7 @@ class Fallthrough(FlowChange):
     to: FlowChangeEdge
 
     def add(self, edge: FlowChangeEdge):
-        raise Exception("Unexpected flowchange addition")
+        raise Exception(f"Unexpected flowchange addition: {edge}")
 
     def __iter__(self):
         yield self.to
@@ -171,7 +170,7 @@ class FuncCall(FlowChange):
     return_edge: FlowChangeEdge
 
     def add(self, edge: FlowChangeEdge):
-        raise Exception("Unexpected flowchange addition")
+        raise Exception(f"Unexpected flowchange addition: {edge}")
 
     def __iter__(self):
         yield self.target_edge
@@ -199,7 +198,7 @@ class CondFuncCall(FlowChange):
             assert edge.from_addr == self.target_edge.from_addr
             self.return_edge = edge
         else:
-            raise Exception("Unexpected flowchange addition")
+            raise Exception(f"Unexpected flowchange addition: {edge}")
 
     def __iter__(self):
         if self.return_edge is not None:
@@ -244,7 +243,7 @@ class FuncExit(FlowChange):
     __slots__ = ()
 
     def add(self, edge: FlowChangeEdge):
-        raise Exception("Unexpected flowchange addition")
+        raise Exception(f"Unexpected flowchange addition: {edge}")
 
 
 FlowChangeType = Union[Unconditional, Branch, Multiple, Exit, Fallthrough, FuncCall, CondFuncCall, RegFuncCall, FuncExit]
@@ -319,49 +318,6 @@ class FlowGraph:
             else:
                 for next_edge in node.flowchange:
                     node_stack.append(next_edge.to_addr)
-
-    #REDO
-    # def bfs(self):
-    #     seen_nodes: set[Address] = set()
-    #     node_queue: SimpleQueue[tuple[Address, list[Address]]] = SimpleQueue()
-    #     node_queue.put((self.start_node.address, []))
-    #     # pending_returns: list[Address] to not put excessive amount of nodes into queue
-
-    #     # print('BFS:')
-    #     while not node_queue.empty():
-    #         cur_node_addr, return_stack = node_queue.get()
-    #         if cur_node_addr in seen_nodes:
-    #             continue
-    #         seen_nodes.add(cur_node_addr)
-    #         # print(f'node 0x{cur_node_addr.hex()}')
-    #         node = self.nodes[cur_node_addr]
-    #         yield node
-    #         if isinstance(node.flowchange, (FuncCall, CondFuncCall, RegFuncCall)):
-    #             for next_block in node.flowchange:
-    #                 next_addr = next_block.to_addr
-    #                 if next_addr not in seen_nodes:
-    #                     node_queue.put((next_addr, [*return_stack, node.flowchange.ret_addr]))
-    #                 else:
-    #                     for i, ret_address in enumerate(reversed(return_stack), 1):
-    #                         if ret_address not in seen_nodes:
-    #                             node_queue.put((ret_address, return_stack[:-i]))
-    #                             break
-    #         elif isinstance(node.flowchange, FuncExit):
-    #             for i, ret_address in enumerate(reversed(return_stack), 1):
-    #                 if ret_address not in seen_nodes:
-    #                     node_queue.put((ret_address, return_stack[:-i]))
-    #                     break
-    #         else:
-    #             for next_block in node.flowchange:
-    #                 next_addr = next_block.to_addr
-    #                 if next_addr not in seen_nodes:
-    #                     node_queue.put((next_addr, return_stack))
-    #                 else:
-    #                     for i, ret_address in enumerate(reversed(return_stack), 1):
-    #                         if ret_address not in seen_nodes:
-    #                             node_queue.put((ret_address, return_stack[:-i]))
-    #                             break
-        # print('BFS finished')
 
     def max_address(self) -> int:
         return self.nodes[max(self.nodes.keys())].end_addr

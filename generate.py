@@ -318,8 +318,7 @@ def _spread_basic_blocks(nodes: list[FlowNode]) -> dict[Address, int]:
     return result
 
 
-# TODO: remove graph from parameters
-def _write_block(graph: FlowGraph, node: FlowNode, out: TextIO, labels: dict[Address, str], offsets: dict[Address, int]):
+def _write_block(node: FlowNode, out: TextIO, labels: dict[Address, str], offsets: dict[Address, int]):
     block_instr_count = sum(node.metrics.instr_by_type.values())
 
     # remove unsupported instructions
@@ -332,11 +331,9 @@ def _write_block(graph: FlowGraph, node: FlowNode, out: TextIO, labels: dict[Add
         out.write(f'\t\t.org 0x{offset:x}\n')
     out.write(f'{labels[node.address]}:\n')
 
-    ###
-    VERBOSE_OUTPUT = True
-    if VERBOSE_OUTPUT:
+    DEBUG_OUTPUT: bool = True
+    if DEBUG_OUTPUT:
         out.write(f'\\\\ source at {node.address:#x}\n')
-    ###
 
     if node.restores_regs:
         out.write('\t\tld\tra, 8(sp)\n'
@@ -477,5 +474,5 @@ def generate_code_from_graph(graph: FlowGraph, out: TextIO, branch_data: BinaryI
     _write_jump_data(jumps_list, offsets, jump_data)
 
     for node in get_write_list(graph):
-        _write_block(graph, node, out, address_to_label, offsets)
+        _write_block(node, out, address_to_label, offsets)
 
