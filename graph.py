@@ -15,13 +15,13 @@ class Address(int):
         return f'{self:#x}'
 
     def __add__(self, x):
-        return Address(self + x)
+        return Address(int(self) + x)
 
     def __iadd__(self, x):
         return self.__add__(x)
 
     def __sub__(self, x):
-        return Address(self - x)
+        return Address(int(self) - x)
 
     def __isub__(self, x):
         return self.__sub__(x)
@@ -269,10 +269,14 @@ class FlowNode:
         return (f'Node(Address="0x{self.address:x}", Instructions={len(self.instructions)}'
                 f'{", Synthetic" if self.is_synthetic else ""})')
 
+    @classmethod
+    def create(cls, address: Address):
+        return cls(address, Address(0), [], Exit(), NodeMetrics({}, set()), False, False, True)
+
 
 @dataclass
 class NodeMetrics:
-    __slots__ = 'instr_by_type',
+    __slots__ = ('instr_by_type', 'data_addresses')
     instr_by_type: dict[str, int]
     data_addresses: set[Address]
     # TODO: include other metrics:

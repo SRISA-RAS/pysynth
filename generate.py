@@ -1,12 +1,12 @@
 from __future__ import annotations
 
+from collections import deque
 from dataclasses import dataclass
 import itertools
 import operator
 from pathlib import Path
 import random
 from typing import BinaryIO, TextIO
-from queue import SimpleQueue
 
 from graph import FlowGraph, FlowNode, FlowChangeEdge, Unconditional, Branch, Multiple, Fallthrough, \
     FuncCall, CondFuncCall, RegFuncCall, FuncExit, Exit
@@ -38,11 +38,11 @@ def find_loops(begin: FlowNode, graph: FlowGraph, depth_limit: int = 100) -> lis
                 pos = path.index(next_address)
                 cycles.append(path[pos:])
             else:
-                queue.append(next_address, path)
+                queue.append((next_address, path))
     return cycles
 
 
-def reduce_loops(loops: list[list[Address]], r_fac: int, min_count: int, graph: FlowGraph):
+def reduce_loops(graph: FlowGraph, loops: list[list[Address]], r_fac: int, min_count: int):
     """
     Reduces each flow transition count in a loop from 'loops' by a factor of 'r_fac'
     but not reducing them to be less than 'min_count'.
@@ -404,8 +404,8 @@ def _write_block(graph: FlowGraph, node: FlowNode, out: TextIO, labels: dict[Add
 
 
 def generate_code_from_graph(graph: FlowGraph, out: TextIO, branch_data: BinaryIO, jump_data: BinaryIO, ram_table: TextIO,
-                             reduction_type: str, reduction_factor: int, name: str = None, seed: int = None,
-                             trace_path: str = None) -> None:
+                             reduction_type: str, reduction_factor: int, name: str = "", seed: int = 0,
+                             trace_path: str = "") -> None:
     """
     TODO: write a docstring, refactor
     TODO: split up into meaningful subprocedures
@@ -417,9 +417,8 @@ def generate_code_from_graph(graph: FlowGraph, out: TextIO, branch_data: BinaryI
 
     if reduction_type != 'none':
         for entry_address in graph.functions | {graph.start_node.address}:
-            loops = find_loops(entry_address, graph)
-            if reduction_type == 'simple':
-                reduce_loops(loops, r_fac=100, min_count=1, graph)
+            loops = find_loops(graph.nodes[entry_address], graph)
+            reduce_loops(graph, loops, r_fac=100, min_count=1)
 
     branches_list, jumps_list = fill_branch_data_(graph)
     _write_branch_data(branches_list, branch_data)

@@ -32,7 +32,7 @@ class GraphBuilder:
     def _reset(self, new_pc: int):
         self.last_pc = new_pc
 
-        self.current_node = FlowNode(new_pc, None, [], Exit(), NodeMetrics({}), False, False, True)
+        self.current_node = FlowNode.create(Address(new_pc))
         self.graph = FlowGraph(self.current_node, {self.current_node.address: self.current_node}, set())
 
         self.node_already_exists = False
@@ -82,7 +82,7 @@ class GraphBuilder:
 
             if self.last_instr == LastInstrType.DELAY_SLOT:
                 _add_or_increment_flowchange(pc, self.current_node, self.node_already_exists, self.callers, self.graph.functions)
-                self.current_node, self.node_already_exists = _get_next_node(self.graph, pc, self.current_node)
+                self.current_node, self.node_already_exists = _get_next_node(self.graph, Address(pc), self.current_node)
             elif self.node_already_exists and pc > self.current_node.address and pc in self.graph.nodes.keys():
                 assert isinstance(self.current_node.flowchange, Fallthrough)
                 self.current_node.flowchange.to.count += 1
@@ -259,7 +259,7 @@ def _add_or_increment_flowchange(pc: Address, current_node: FlowNode, node_exist
             current_node.flowchange.add(edge)
 
 
-def _get_next_node(graph: FlowGraph, pc: int, current_node: FlowNode) -> tuple[FlowNode, bool]:
+def _get_next_node(graph: FlowGraph, pc: Address, current_node: FlowNode) -> tuple[FlowNode, bool]:
     """
     Returns an object of the currently being parsed node and whether it already exists.
     Splices an already existing node if needed.
@@ -274,10 +274,9 @@ def _get_next_node(graph: FlowGraph, pc: int, current_node: FlowNode) -> tuple[F
             if node.address < pc <= node.end_addr:
                 _, next_node = splice_node(graph, node.address, pc)
                 return next_node, True
-        else:
-            next_node = FlowNode(pc, None, [], Exit(), NodeMetrics({}), False, False, True)
-            graph.nodes[pc] = next_node
-            return next_node, False
+        new_node = FlowNode.create(pc)
+        graph.nodes[pc] = new_node
+        return new_node, False
 
 
 def _ensure_explicit_end(graph: FlowGraph, pc: Address, last_node: FlowNode):

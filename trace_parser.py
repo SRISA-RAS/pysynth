@@ -84,7 +84,7 @@ def _jumped_into_branch_target(pc: Address, *instructions: str) -> bool:
 
 
 # replace TextIO with pathlib.Path parameter, use 'with open(trace_file) as f:' and change trace_file to f
-def parse_trace(trace_file: TextIO) -> Iterator[Union[LineData, ParseSignal]]:
+def parse_trace(trace_file: TextIO) -> Iterator[Union[LineData, MetricData, ParseSignal]]:
     last_pc = _skip_to_trace_start(trace_file)
     yield ParseSignal(SignalType.START, last_pc)
 
