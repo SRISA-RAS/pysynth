@@ -30,7 +30,10 @@ def find_loops(begin: FlowNode, graph: FlowGraph, depth_limit: int = 100) -> lis
     while len(queue) > 0:
         address, path = queue.popleft()
         assert len(path) < depth_limit, f'Got over {depth_limit=} in find_loops'
-        node = graph.nodes[address]
+        node = graph.nodes.get(address)
+        if node is None:
+            print("Error: no node with address {address}")
+            continue
         path = [*path, address]
         for edge in node.flowchange:
             next_address = edge.to_addr
@@ -421,8 +424,10 @@ def generate_code_from_graph(graph: FlowGraph, out: TextIO, branch_data: BinaryI
 
     if reduction_type != 'none':
         for entry_address in graph.functions | {graph.start_node.address}:
-            loops = find_loops(graph.nodes[entry_address], graph)
-            reduce_loops(graph, loops, r_fac=100, min_count=1)
+            address = graph.nodes.get(entry_address)
+            if address is not None:
+                loops = find_loops(address, graph)
+                reduce_loops(graph, loops, r_fac=100, min_count=1)
 
     branches_list, jumps_list = fill_branch_data_(graph)
     _write_branch_data(branches_list, branch_data)
