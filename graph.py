@@ -13,6 +13,9 @@ class Address(int):
     def __str__(self):
         return f'{self:#x}'
 
+    def __repr__(self):
+        return f'Address({self.__str__()})'
+
     def __add__(self, x):
         return Address(int(self) + x)
 
@@ -89,14 +92,16 @@ class Unconditional(FlowChange):
 @dataclass
 class Branch(FlowChange):
     __slots__ = ('taken', 'nottaken')
-    taken: FlowChangeEdge
-    nottaken: FlowChangeEdge
+    taken: FlowChangeEdge | None
+    nottaken: FlowChangeEdge | None
 
     def add(self, edge: FlowChangeEdge):
         if self.taken is None:
+            assert self.nottaken is not None
             assert edge.from_addr == self.nottaken.from_addr
             self.taken = edge
         elif self.nottaken is None:
+            assert self.taken is not None
             assert edge.from_addr == self.taken.from_addr
             self.nottaken = edge
         else:
@@ -187,14 +192,16 @@ class FuncCall(FlowChange):
 @dataclass
 class CondFuncCall(FlowChange):
     __slots__ = ('target_edge', 'return_edge')
-    target_edge: FlowChangeEdge
-    return_edge: FlowChangeEdge
+    target_edge: FlowChangeEdge | None
+    return_edge: FlowChangeEdge | None
 
     def add(self, edge: FlowChangeEdge):
         if self.target_edge is None:
+            assert self.return_edge is not None
             assert edge.from_addr == self.return_edge.from_addr
             self.target_edge = edge
         elif self.return_edge is None:
+            assert self.target_edge is not None
             assert edge.from_addr == self.target_edge.from_addr
             self.return_edge = edge
         else:
@@ -312,6 +319,7 @@ class FlowGraph:
                 for next_edge in reversed(node.flowchange):
                     node_stack.append(next_edge.to_addr)
             elif isinstance(node.flowchange, (FuncCall, CondFuncCall, RegFuncCall)):
+                assert node.flowchange.return_edge is not None
                 node_stack.append(node.flowchange.return_edge.to_addr)
             elif isinstance(node.flowchange, FuncExit):
                 raise Exception("Somehow iterated over FuncExit node {node.address:#x}")
@@ -319,10 +327,10 @@ class FlowGraph:
                 for next_edge in node.flowchange:
                     node_stack.append(next_edge.to_addr)
 
-    def max_address(self) -> int:
+    def max_address(self) -> Address:
         return self.nodes[max(self.nodes.keys())].end_addr
 
-    def min_address(self) -> int:
+    def min_address(self) -> Address:
         return min(self.nodes.keys())
 
 

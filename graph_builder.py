@@ -5,7 +5,7 @@ from dataclasses import astuple
 from enum import Enum, unique
 from typing import TextIO
 
-from graph import Address, FlowChangeEdge, FlowGraph, FlowNode, Instruction, NodeMetrics,\
+from graph import Address, FlowChangeEdge, FlowChange, FlowGraph, FlowNode, Instruction, NodeMetrics,\
     Unconditional, Branch, Multiple, FuncCall, CondFuncCall, RegFuncCall, FuncExit, Fallthrough, Exit,\
     get_instruction_type
 from instruction_types import FLOW_CHANGE_TYPES, SUBTYPE_TO_INSTRUCTIONS
@@ -49,12 +49,12 @@ class GraphBuilder:
 
     def _handle_metric(self, metric: MetricData):
         if metric.type == MetricType.LOADSTORE_ADDRESS:
-            current_node.metrics.data_addresses.add(metric.data)
+            self.current_node.metrics.data_addresses.add(metric.data)
         else:
             raise Exception(f'Unknown MetricData of type {metric.type}')
 
     def _apply_fixes(self):
-        _ensure_explicit_end(self.graph, self.last_pc, self.current_node)
+        _ensure_explicit_end(self.graph, Address(self.last_pc), self.current_node)
         _graph_fix_missing_branches(self.graph)
         _graph_fix_missing_delay_slot(self.graph)
         _graph_fix_func_call_reg_restoration(self.graph)
@@ -181,8 +181,8 @@ def splice_node(graph: FlowGraph, node_addr: Address, instr_pc: Address) -> tupl
 # TODO: consider what to do with function not returning where they are expected to return (some smart stack manipulation)
 #       as this breaks everything later - we may end up iterating over function nodes in main graph
 # TODO: graph and line params are for debugging - remove them
-def _add_or_increment_flowchange(pc: Address, current_node: FlowNode, node_exists: bool, callers: list[FlowChangeEdge],
-                                 functions: set[Address]) -> int:
+def _add_or_increment_flowchange(pc: Address, current_node: FlowNode, node_exists: bool, callers: list[FlowChange],
+                                 functions: set[Address]):
     """
     Adds a flowchange for a node if it was not seen before or this is the first occurence of this node.
     Increments the count of this flowchange otherwise.
@@ -288,10 +288,10 @@ def _ensure_explicit_end(graph: FlowGraph, pc: Address, last_node: FlowNode):
         last_node.missing_delay_slot = False
         last_node.end_addr = last_node.instructions[-1].program_counter
     else:
-        new_address = graph.max_address() + 4
+        new_address = graph.max_address().get_next()
         wait_instr = Instruction(new_address, 'wait 0x7ffff')
         endnode = FlowNode(new_address, new_address, [wait_instr], Exit(),
-                           NodeMetrics({'privileged': 1}), True, False, False)
+                           NodeMetrics({'privileged': 1}, set()), True, False, False)
         assert endnode.address not in graph.nodes.keys()
         graph.nodes[endnode.address] = endnode
         split_index = -1 if last_node.missing_delay_slot or isinstance(last_node.flowchange, Fallthrough) else -2

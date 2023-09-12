@@ -57,11 +57,11 @@ def reduce_loops(graph: FlowGraph, loops: list[list[Address]], r_fac: int, min_c
         for address_from, address_to in itertools.pairwise(loop):
             for fc in graph.nodes[address_from].flowchange:
                 if fc.to_addr == address_to:
+                    if (fc_id := id(fc)) not in reduced:
+                        new_count = max(fc.count // r_fac, min(min_count, fc.count))
+                        fc.count = new_count
+                        reduced.add(fc_id)
                     break
-            if (fc_id := id(fc)) not in reduced:
-                new_count = max(fc.count // r_fac, min(min_count, fc.count))
-                fc.count = new_count
-                reduced.add(fc_id)
 
 
 def _get_next_branch(left: FlowChangeEdge, right: FlowChangeEdge) -> tuple[FlowChangeEdge, bool]:
@@ -109,6 +109,8 @@ def fill_branch_data_(graph: FlowGraph) -> tuple[list[bool], list[FlowChangeEdge
             current_node = graph.nodes[node_flowchange.target_edge.to_addr]
             return_stack.append(node_flowchange.return_edge.to_addr)
         elif isinstance(node_flowchange, CondFuncCall):
+            assert node_flowchange.target_edge is not None
+            assert node_flowchange.return_edge is not None
             next_edge, branch_taken = _get_next_branch(node_flowchange.return_edge, node_flowchange.target_edge)
             return_stack.append(node_flowchange.return_edge.to_addr)   # be wary of unexpected behaviour there
             branches_result.append(branch_taken)
@@ -124,6 +126,8 @@ def fill_branch_data_(graph: FlowGraph) -> tuple[list[bool], list[FlowChangeEdge
             current_node = graph.nodes[next_edge.to_addr]
         else:
             assert isinstance(node_flowchange, Branch)
+            assert node_flowchange.nottaken is not None
+            assert node_flowchange.taken is not None
             next_edge, branch_taken = _get_next_branch(node_flowchange.nottaken, node_flowchange.taken)
             branches_result.append(branch_taken)
             current_node = graph.nodes[next_edge.to_addr]
@@ -240,6 +244,8 @@ def generate_operands_(instruction: str) -> str:
             return f'fp{random.randint(0, 31)}, {random.randint(-8192, 8191) << 2}(a{random.randint(0, 3)})'
         elif instruction in {'ldc1', 'sdc1'}:
             return f'fp{random.randint(0, 31)}, {random.randint(-4096, 4095) << 3}(a{random.randint(0, 3)})'
+        else:
+            raise Exception('unknown floating point load/store instruction')
     elif operands_type == OperandType.F_LOADSTORE_INDEXED:
         return f'fp{random.randint(0, 31)}, t{random.randint(0, 7)}(a{random.randint(0, 3)})'
     elif operands_type == OperandType.F_MOVE:
@@ -372,6 +378,7 @@ def _write_block(node: FlowNode, out: TextIO, labels: dict[Address, str], offset
                   f'\t\tjal\t{labels[node.flowchange.target_edge.to_addr]}\n')
         out.write(generate_instruction_(node))
     elif isinstance(node.flowchange, CondFuncCall):
+        assert node.flowchange.target_edge.to_addr is not None
         out.write('\t\tdaddiu\tsp, sp, -8\n'
                   '\t\tsd\tra, 8(sp)\n'
                   '\t\tlb\tt1, 0x0(s7)\n'
