@@ -22,9 +22,9 @@ def main():
                         action='store_true')
     parser.add_argument('--loops',
                         help='choose loop reduction technique',
-                        type=str, choices=['all', 'innermost', 'outermost'], default='all')
+                        type=str, choices=['all', 'none'], default='all')
     parser.add_argument('-r', '--reduction',
-                        help='reduce loops by this amount',
+                        help='reduce loops by this amount (WARNING: currently ignored)',
                         type=int, default=100)
     parser.add_argument('-n', '--name',
                         help='write this at the start of a resulting test file',
