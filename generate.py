@@ -158,7 +158,7 @@ def _write_jump_data(jumps: list[FlowChangeEdge], offsets: dict[Address, int], o
         out.write((base_addr + offsets[jump.to_addr]).to_bytes(8, byteorder='big'))
 
 
-def generate_operands_(instruction: str) -> str:
+def generate_operands_(node: FlowNode, labels: dict[Address, str], instruction: str) -> str:
     """
     Generates operands for a given instruction in accordance with operands types allowed for it.
     """
@@ -187,16 +187,16 @@ def generate_operands_(instruction: str) -> str:
         return ''
     elif operands_type == OperandType.LS_OPERANDS:
         if instruction in {'lb', 'lbu', 'sb', 'ldl', 'ldr', 'sdl', 'sdr', 'lwl', 'lwr', 'swl', 'swr'}:
-            return f't{random.randint(0, 7)}, {random.randint(-32768, 32767)}(a{random.randint(0, 3)})'
+            return f't{random.randint(0, 7)}, offset_b_{labels[node.address]}(a{random.randint(0, 3)})'
         elif instruction in {'lh', 'lhu', 'sh'}:
-            return f't{random.randint(0, 7)}, {random.randint(-16384, 16383) << 1}(a{random.randint(0, 3)})'
+            return f't{random.randint(0, 7)}, offset_h_{labels[node.address]}(a{random.randint(0, 3)})'
         elif instruction in {'lw', 'lwu', 'sw'}:
-            return f't{random.randint(0, 7)}, {random.randint(-8192, 8191) << 2}(a{random.randint(0, 3)})'
+            return f't{random.randint(0, 7)}, offset_w_{labels[node.address]}(a{random.randint(0, 3)})'
         elif instruction in {'ld', 'sd'}:
-            return f't{random.randint(0, 7)}, {random.randint(-4096, 4095) << 3}(a{random.randint(0, 3)})'
+            return f't{random.randint(0, 7)}, offset_d_{labels[node.address]}(a{random.randint(0, 3)})'
         raise Exception('unknown load/store instruction')
     elif operands_type == OperandType.PREF_OPERANDS:
-        return f'{random.choice(["0x0", "0x1e"])}, {random.randint(-32768, 32767)}(a{random.randint(0, 3)})'
+        return f'{random.choice(["0x0", "0x1e"])}, offset_d_{labels[node.address]}(a{random.randint(0, 3)})'
     elif operands_type == OperandType.PREFX_OPERANDS:
         raise Exception('prefx is supposed to be unused')
     elif operands_type == OperandType.SYNCI_OPERANDS:
@@ -263,7 +263,7 @@ def generate_operands_(instruction: str) -> str:
         raise Exception('unexpected operand type of an instruction')
 
 
-def generate_instruction_(node: FlowNode) -> str:
+def generate_instruction_(node: FlowNode, labels: dict[Address, str]) -> str:
     """
     Randomly generates an instruction, following an instruction type distribution of the given node.
     """
@@ -274,7 +274,7 @@ def generate_instruction_(node: FlowNode) -> str:
         generated_instruction, = random.sample(SUBTYPE_TO_INSTRUCTIONS[generated_type], 1)
     else:
         generated_instruction = 'nop'
-    return f'\t\t{generated_instruction}\t{generate_operands_(generated_instruction)}\n'
+    return f'\t\t{generated_instruction}\t{generate_operands_(node, labels, generated_instruction)}\n'
 
 
 def get_write_list(graph: FlowGraph) -> list[FlowNode]:
@@ -327,7 +327,7 @@ def _spread_basic_blocks(nodes: list[FlowNode]) -> dict[Address, int]:
     return result
 
 
-def _write_block(node: FlowNode, out: TextIO, labels: dict[Address, str], offsets: dict[Address, int]):
+def _write_block(node: FlowNode, out: TextIO, defines: TextIO, labels: dict[Address, str], offsets: dict[Address, int]):
     block_instr_count = sum(node.metrics.instr_by_type.values())
 
     # remove unsupported instructions
@@ -343,43 +343,50 @@ def _write_block(node: FlowNode, out: TextIO, labels: dict[Address, str], offset
     DEBUG_OUTPUT: bool = True
     if DEBUG_OUTPUT:
         out.write(f'\\\\ source at {node.address:#x}\n')
-
+    """
+    TODO: replace predefined offsets with readed from log
+    TODO: add different base addr for every node
+    """
+    defines.write(f'#define offset_b_{labels[node.address]}\t0x10\n')
+    defines.write(f'#define offset_h_{labels[node.address]}\t0x20\n')
+    defines.write(f'#define offset_w_{labels[node.address]}\t0x30\n')
+    defines.write(f'#define offset_d_{labels[node.address]}\t0x40\n\n')
     if node.restores_regs:
         out.write('\t\tld\tra, 8(sp)\n'
                   '\t\tdaddiu\tsp, sp, 8\n')
         block_instr_count = max(block_instr_count - 2, 0)
     for _ in range(block_instr_count - 7):
-        out.write(generate_instruction_(node))
+        out.write(generate_instruction_(node, labels))
     if isinstance(node.flowchange, Unconditional):
         for _ in range(max(block_instr_count - 7, 0), block_instr_count - 2):
-            out.write(generate_instruction_(node))
+            out.write(generate_instruction_(node, labels))
         out.write(f'\t\tj\t{labels[node.flowchange.edge.to_addr]}\n')
-        out.write(generate_instruction_(node))
+        out.write(generate_instruction_(node, labels))
     elif isinstance(node.flowchange, Branch):
         assert node.flowchange.taken is not None and node.flowchange.nottaken is not None
         for _ in range(max(block_instr_count - 7, 0), block_instr_count - 4):
-            out.write(generate_instruction_(node))
+            out.write(generate_instruction_(node, labels))
         out.write('\t\tlb\tt1, 0x0(s7)\n'
                   '\t\tdaddiu\ts7, s7, 1\n'
                   f'\t\tbne\tt1, r0, {labels[node.flowchange.taken.to_addr]}\n')
-        out.write(generate_instruction_(node))
+        out.write(generate_instruction_(node, labels))
     elif isinstance(node.flowchange, Multiple):
         for _ in range(max(block_instr_count - 7, 0), block_instr_count - 4):
-            out.write(generate_instruction_(node))
+            out.write(generate_instruction_(node, labels))
         out.write('\t\tld\tt1, 0x0(s6)\n'
                   '\t\tdaddiu\ts6, s6, 8\n'
                   '\t\tjr\tt1\n')
-        out.write(generate_instruction_(node))
+        out.write(generate_instruction_(node, labels))
     elif isinstance(node.flowchange, Fallthrough):
         for _ in range(4):
-            out.write(generate_instruction_(node))
+            out.write(generate_instruction_(node, labels))
     elif isinstance(node.flowchange, FuncCall):
         for _ in range(max(block_instr_count - 7, 0), block_instr_count - 4):
-            out.write(generate_instruction_(node))
+            out.write(generate_instruction_(node, labels))
         out.write('\t\tdaddiu\tsp, sp, -8\n'
                   '\t\tsd\tra, 8(sp)\n'
                   f'\t\tjal\t{labels[node.flowchange.target_edge.to_addr]}\n')
-        out.write(generate_instruction_(node))
+        out.write(generate_instruction_(node, labels))
     elif isinstance(node.flowchange, CondFuncCall):
         assert node.flowchange.target_edge.to_addr is not None
         out.write('\t\tdaddiu\tsp, sp, -8\n'
@@ -388,30 +395,30 @@ def _write_block(node: FlowNode, out: TextIO, labels: dict[Address, str], offset
                   '\t\tdaddiu\ts7, s7, 1\n'
                   '\t\tdsubu\tt1, t1, 1\n'
                   f'\t\tbgezal\tt1, {labels[node.flowchange.target_edge.to_addr]}\n')
-        out.write(generate_instruction_(node))
+        out.write(generate_instruction_(node, labels))
     elif isinstance(node.flowchange, RegFuncCall):
         for _ in range(max(block_instr_count - 7, 0), block_instr_count - 6):
-            out.write(generate_instruction_(node))
+            out.write(generate_instruction_(node, labels))
         out.write('\t\tdaddiu\tsp, sp, -8\n'
                   '\t\tsd\tra, 8(sp)\n'
                   '\t\tld\tt1, 0x0(s6)\n'
                   '\t\tdaddiu\ts6, s6, 8\n'
                   '\t\tjalr\tt1\n')
-        out.write(generate_instruction_(node))
+        out.write(generate_instruction_(node, labels))
     elif isinstance(node.flowchange, FuncExit):
         for _ in range(max(block_instr_count - 7, 0), block_instr_count - 2):
-            out.write(generate_instruction_(node))
+            out.write(generate_instruction_(node, labels))
         out.write('\t\tjr\tra\n')
-        out.write(generate_instruction_(node))
+        out.write(generate_instruction_(node, labels))
     else:
         assert isinstance(node.flowchange, Exit)
         for _ in range(max(block_instr_count - 7, 0), block_instr_count - 1):
-            out.write(generate_instruction_(node))
+            out.write(generate_instruction_(node, labels))
         out.write('\t\twait\t0x7ffff\n')
 
 
 def generate_code_from_graph(graph: FlowGraph, out: TextIO, branch_data: BinaryIO, jump_data: BinaryIO, ram_table: TextIO,
-                             reduction_type: str, reduction_factor: int, name: str = "", seed: int = 0,
+		defines: TextIO, reduction_type: str, reduction_factor: int, name: str = "", seed: int = 0,
                              trace_path: str = "") -> None:
     """
     TODO: write a docstring, refactor
@@ -457,7 +464,8 @@ def generate_code_from_graph(graph: FlowGraph, out: TextIO, branch_data: BinaryI
               '.set noreorder\n'
               '#include "regdef_k64.h"\n'
               '#include "kernel_k64.h"\n'
-              '#include "handlers.h"\n\n'
+              '#include "handlers.h"\n'
+	      '#include "defines.h"\n\n'
               f'#define BRANCH_TABLE_ADDR\t{btable_addr:#x}\n'
               f'#define JUMP_TABLE_ADDR\t\t{jtable_addr:#x}\n'
               f'#define MEM_AREA_0\t\t{mem_area_0:#x}\n'
@@ -486,5 +494,5 @@ def generate_code_from_graph(graph: FlowGraph, out: TextIO, branch_data: BinaryI
     _write_jump_data(jumps_list, offsets, jump_data)
 
     for node in get_write_list(graph):
-        _write_block(node, out, address_to_label, offsets)
+        _write_block(node, out, defines, address_to_label, offsets)
 

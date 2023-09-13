@@ -52,10 +52,11 @@ def main():
                 out_dir = Path.cwd() / out_dir
             out_dir.mkdir(parents=True, exist_ok=True)
             with open(out_dir / 'test.S', 'w') as output, open(out_dir / 'btable.bin', 'wb') as out_branches,\
-                    open(out_dir / 'jtable.bin', 'wb') as out_jumps, open(out_dir / 'ram_table.ini', 'w') as ram_table:
+                    open(out_dir / 'jtable.bin', 'wb') as out_jumps, open(out_dir / 'ram_table.ini', 'w') as ram_table,\
+		    open(out_dir / 'defines.h', 'w') as defines:
                 if args.verbose:
                     print('Generating code...')
-                generate_code_from_graph(flowgraph, output, out_branches, out_jumps, ram_table, args.loops,
+                generate_code_from_graph(flowgraph, output, out_branches, out_jumps, ram_table, defines, args.loops,
                                          args.reduction, args.name, args.seed, args.source)
         if args.verbose:
             print('Done!')
